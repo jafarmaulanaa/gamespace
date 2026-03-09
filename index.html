@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Shooter: Ja'far Strike</title>
+    <style>
+        body { margin: 0; background: #010103; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; justify-content: center; }
+        canvas { background: radial-gradient(circle, #1a1a2e 0%, #000 100%); border-left: 1px solid #333; border-right: 1px solid #333; }
+        
+        /* TAMPILAN MENU (Sesuai Request) */
+        #ui-layer {
+            position: absolute; top: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, 0.85); z-index: 10; transition: 0.5s; backdrop-filter: blur(5px);
+        }
+
+        .btn-play {
+            padding: 15px 50px; font-size: 22px; background: linear-gradient(45deg, #ff416c, #ff4b2b); border: none;
+            border-radius: 50px; cursor: pointer; color: white; font-weight: bold;
+            box-shadow: 0 0 25px rgba(255, 75, 43, 0.7); transition: 0.3s; margin-top: 30px; text-transform: uppercase; letter-spacing: 2px;
+        }
+
+        .btn-play:hover { transform: scale(1.1); box-shadow: 0 0 40px rgba(255, 75, 43, 1); }
+        
+        .stats { position: absolute; top: 25px; left: 25px; font-size: 28px; color: #fff; font-weight: bold; text-shadow: 0 0 10px #ff4b2b; font-family: 'Courier New', monospace; z-index: 5; }
+        .dev-info { font-size: 14px; color: #888; margin-top: 50px; border-top: 1px solid #333; padding-top: 15px; text-align: center; }
+        h1 { font-size: 56px; letter-spacing: 8px; margin-bottom: 0; color: #fff; text-shadow: 0 0 20px #ff4b2b; text-transform: uppercase; }
+        p strong { color: #ff4b2b; }
+    </style>
+</head>
+<body>
+
+    <div class="stats">SCORE: <span id="scoreText">0</span></div>
+
+    <div id="ui-layer">
+        <h1>SPACE STRIKE</h1>
+        <div style="max-width: 400px; text-align: center; line-height: 1.8; font-size: 18px; color: #ccc;">
+            <p><strong>Instruksi Misi:</strong><br>
+            1. Gerakkan Mouse/Jari untuk mengendalikan jet tempur.<br>
+            2. Sistem tembakan otomatis aktif.<br>
+            3. Hancurkan meteor! JANGAN biarkan menembus pertahanan bawah!</p>
+        </div>
+        
+        <button class="btn-play" onclick="startGame()">MEMULAI SERANGAN</button>
+
+        <div class="dev-info">
+            Commander & Developer: <strong>Ja'far Maulana</strong><br>
+            © 2026 Galactic Defense Force
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreText = document.getElementById('scoreText');
+        const uiLayer = document.getElementById('ui-layer');
+
+        canvas.width = window.innerWidth > 500 ? 500 : window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let playing = false;
+        let score = 0;
+        let ship = { x: canvas.width/2 - 30, y: canvas.height - 100, w: 60, h: 60 };
+        let bullets = [];
+        let enemies = [];
+        let stars = [];
+
+        // Buat Bintang Background
+        for(let i=0; i<80; i++) {
+            stars.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2 + 0.5 });
+        }
+
+        function startGame() {
+            uiLayer.style.opacity = '0';
+            setTimeout(() => { uiLayer.style.display = 'none'; }, 500);
+            playing = true;
+            score = 0;
+            scoreText.innerText = score;
+            bullets = [];
+            enemies = [];
+            ship.x = canvas.width/2 - ship.w/2;
+        }
+
+        function move(e) {
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let rect = canvas.getBoundingClientRect();
+            ship.x = clientX - rect.left - ship.w / 2;
+            if(ship.x < 0) ship.x = 0;
+            if(ship.x > canvas.width - ship.w) ship.x = canvas.width - ship.w;
+        }
+        window.addEventListener('mousemove', move);
+        window.addEventListener('touchmove', (e) => { move(e); e.preventDefault(); }, {passive: false});
+
+        // DRAW JET TEMPUR (Tampilan Keren Tanpa File Gambar)
+        function drawShip(x, y, w, h) {
+            ctx.shadowBlur = 20; ctx.shadowColor = '#00d2ff';
+            // Sayap Belakang
+            ctx.fillStyle = '#005f7a';
+            ctx.fillRect(x + 5, y + h - 15, w - 10, 10);
+            // Badan Utama (Jet)
+            ctx.fillStyle = '#00d2ff';
+            ctx.beginPath();
+            ctx.moveTo(x + w/2, y); // Hidung jet
+            ctx.lineTo(x, y + h - 10);
+            ctx.lineTo(x + w/2, y + h - 20);
+            ctx.lineTo(x + w, y + h - 10);
+            ctx.closePath();
+            ctx.fill();
+            // Kaca Kokpit
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.ellipse(x + w/2, y + h/2.5, 6, 12, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // DRAW METEOR (Gede & Detail Tanpa File Gambar)
+        function drawMeteor(x, y, size) {
+            ctx.fillStyle = '#4a3b33'; // Warna Batu
+            ctx.beginPath();
+            ctx.moveTo(x + size/2, y);
+            ctx.lineTo(x + size, y + size/3);
+            ctx.lineTo(x + size*0.8, y + size);
+            ctx.lineTo(x + size/4, y + size*0.9);
+            ctx.lineTo(x, y + size/2);
+            ctx.closePath();
+            ctx.fill();
+            // Kawah-kawah meteor
+            ctx.fillStyle = '#2b211a';
+            ctx.beginPath(); ctx.arc(x + size/2.5, y + size/2.5, size/6, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + size/1.5, y + size/1.5, size/8, 0, Math.PI*2); ctx.fill();
+        }
+
+        function update() {
+            if(!playing) return;
+
+            // Gerakan Bintang
+            stars.forEach(s => {
+                s.y += s.s;
+                if(s.y > canvas.height) s.y = 0;
+            });
+
+            // Munculkan Meteor Gede
+            if(Math.random() < 0.02) {
+                let size = 45 + Math.random() * 25;
+                enemies.push({ x: Math.random()*(canvas.width - size), y: -size, size: size, speed: 2 + (score/300) });
+            }
+
+            // Tembakan Laser Otomatis
+            if(Date.now() % 5 === 0) {
+                bullets.push({ x: ship.x + ship.w/2 - 3, y: ship.y, w: 6, h: 25 });
+            }
+
+            // Update Peluru
+            bullets.forEach((b, bi) => {
+                b.y -= 12;
+                if(b.y < -30) bullets.splice(bi, 1);
+            });
+
+            // Update Meteor & Cek Tabrakan
+            for(let i = enemies.length-1; i >= 0; i--) {
+                let e = enemies[i];
+                e.y += e.speed;
+
+                if(e.y > canvas.height) {
+                    playing = false;
+                    alert("PERTAHANAN JEBOL!\nSkor Akhir: " + score);
+                    location.reload();
+                }
+
+                bullets.forEach((b, bi) => {
+                    if(b.x < e.x + e.size && b.x + b.w > e.x && b.y < e.y + e.size && b.y + b.h > e.y) {
+                        enemies.splice(i, 1);
+                        bullets.splice(bi, 1);
+                        score += 10;
+                        scoreText.innerText = score;
+                    }
+                });
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Background Bintang
+            ctx.fillStyle = '#fff';
+            stars.forEach(s => ctx.fillRect(s.x, s.y, s.s, s.s));
+
+            // Laser Merah (Glow)
+            ctx.shadowBlur = 15; ctx.shadowColor = '#ff4b2b';
+            ctx.fillStyle = '#ff4b2b';
+            bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+            ctx.shadowBlur = 0;
+
+            // Gambar Objek
+            drawShip(ship.x, ship.y, ship.w, ship.h);
+            enemies.forEach(e => drawMeteor(e.x, e.y, e.size));
+
+            requestAnimationFrame(draw);
+        }
+
+        setInterval(update, 1000/60);
+        draw();
+    </script>
+</body>
+</html>
